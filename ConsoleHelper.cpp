@@ -1,6 +1,6 @@
 ﻿#include "ConsoleHelper.h"
 #include <cstdlib>
-#include <cstdio>   // ← ДОБАВЬТЕ ЭТУ СТРОКУ
+#include <cstdio>   
 
 void ConsoleHelper::clearScreen() { system("cls"); }
 
@@ -34,7 +34,7 @@ void ConsoleHelper::writeCharAt(int x, int y, char c, WORD color) {
     if (x < 0 || y < 0) return;
     setCursorPosition(x, y);
     setColor(color);
-    putchar(c);   // ← ПРОВЕРЬТЕ: putchar, а НЕ putcher
+    putchar(c);   
 }
 
 WORD ConsoleHelper::getRandomBrightColor() {
