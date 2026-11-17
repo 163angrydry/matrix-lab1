@@ -1,5 +1,4 @@
 #include "AppManager.h"
-#include "Line.h"
 #include "ConsoleHelper.h"
 #include <iostream>
 #include <string>
@@ -9,7 +8,7 @@
 #include <windows.h>
 
 AppManager::AppManager(int argc, char* argv[]) : running(true),
-secondStart(0), nextSpawnIndex(0) {
+    secondStart(0), nextSpawnIndex(0) {
     srand((unsigned)time(nullptr));
 
     if (argc > 1) {
@@ -20,49 +19,59 @@ secondStart(0), nextSpawnIndex(0) {
             return;
         }
         if (!parseArgs(argc, argv)) running = false;
-    }
-    else {
+    } else {
         runDialog();
     }
 }
 
 bool AppManager::parseArgs(int argc, char* argv[]) {
-    if (argc != 5) {
-        std::cerr << "Error: expected 4 arguments\n";
+    if (argc != 8) {
+        std::cerr << "Error: expected 7 arguments\n";
         showHelp();
         return false;
     }
     try {
         int frequency = std::stoi(argv[1]);
-        int speed = std::stoi(argv[2]);
-        int length = std::stoi(argv[3]);
+        int speed     = std::stoi(argv[2]);
+        int length    = std::stoi(argv[3]);
         std::string epi = argv[4];
+        int explosionProb = std::stoi(argv[5]);
+        int minRadius = std::stoi(argv[6]);
+        int maxRadius = std::stoi(argv[7]);
 
         if (!validateFrequency(frequency) || !validateSpeed(speed) ||
-            !validateLength(length) || !validateEpilepsy(epi))
+            !validateLength(length) || !validateEpilepsy(epi) ||
+            !validateExplosionProbability(explosionProb) ||
+            !validateMinRadius(minRadius) ||
+            !validateMaxRadius(minRadius, maxRadius))
             return false;
 
         params.frequency = frequency;
-        params.speed = speed;
-        params.length = length;
-        params.epilepsy = (epi == "Y" || epi == "y");
+        params.speed     = speed;
+        params.length    = length;
+        params.epilepsy  = (epi == "Y" || epi == "y");
+        params.explosionProbability = explosionProb;
+        params.minExplosionRadius = minRadius;
+        params.maxExplosionRadius = maxRadius;
         return true;
-    }
-    catch (...) {
+    } catch (...) {
         std::cerr << "Error: invalid arguments\n";
         return false;
     }
 }
 
 void AppManager::showHelp() {
-    std::cout << "Matrix - OOP Lab 2\n"
-        << "Usage: matrix.exe [frequency] [speed] [length] [epilepsy]\n"
-        << "  frequency : 1..30 (lines per second)\n"
-        << "  speed     : 1..30 (chars per second)\n"
-        << "  length    : 1..30 (chars)\n"
-        << "  epilepsy  : Y or N\n"
-        << "Example: matrix.exe 3 23 8 Y\n"
-        << "Or run without arguments for dialog mode.\n";
+    std::cout << "Matrix - OOP Lab 3\n"
+              << "Usage: matrix.exe [frequency] [speed] [length] [epilepsy] [explosionProb] [minRadius] [maxRadius]\n"
+              << "  frequency    : 1..30 (lines per second)\n"
+              << "  speed        : 1..30 (chars per second)\n"
+              << "  length       : 1..30 (chars)\n"
+              << "  epilepsy     : Y or N\n"
+              << "  explosionProb: 1..1000 (probability per step)\n"
+              << "  minRadius    : 1..10\n"
+              << "  maxRadius    : 1..10 (>= minRadius)\n"
+              << "Example: matrix.exe 3 23 8 N 50 2 5\n"
+              << "Or run without arguments for dialog mode.\n";
 }
 
 void AppManager::runDialog() {
@@ -94,17 +103,46 @@ void AppManager::runDialog() {
         if (!validateEpilepsy(epi)) std::cout << "Invalid input. Try again.\n";
     } while (!validateEpilepsy(epi));
 
+    int explosionProb;
+    do {
+        std::cout << "Explosion probability (1-1000): ";
+        std::cin >> explosionProb;
+        if (!validateExplosionProbability(explosionProb)) std::cout << "Invalid probability. Try again.\n";
+    } while (!validateExplosionProbability(explosionProb));
+
+    int minRadius;
+    do {
+        std::cout << "Min explosion radius (1-10): ";
+        std::cin >> minRadius;
+        if (!validateMinRadius(minRadius)) std::cout << "Invalid min radius. Try again.\n";
+    } while (!validateMinRadius(minRadius));
+
+    int maxRadius;
+    do {
+        std::cout << "Max explosion radius (1-10, >= " << minRadius << "): ";
+        std::cin >> maxRadius;
+        if (!validateMaxRadius(minRadius, maxRadius)) std::cout << "Invalid max radius. Try again.\n";
+    } while (!validateMaxRadius(minRadius, maxRadius));
+
     params.frequency = frequency;
-    params.speed = speed;
-    params.length = length;
-    params.epilepsy = (epi == "Y" || epi == "y");
+    params.speed     = speed;
+    params.length    = length;
+    params.epilepsy  = (epi == "Y" || epi == "y");
+    params.explosionProbability = explosionProb;
+    params.minExplosionRadius = minRadius;
+    params.maxExplosionRadius = maxRadius;
 }
 
 bool AppManager::validateFrequency(int f) { return f >= 1 && f <= 30; }
-bool AppManager::validateSpeed(int s) { return s >= 1 && s <= 30; }
-bool AppManager::validateLength(int l) { return l >= 1 && l <= 30; }
+bool AppManager::validateSpeed(int s)     { return s >= 1 && s <= 30; }
+bool AppManager::validateLength(int l)    { return l >= 1 && l <= 30; }
 bool AppManager::validateEpilepsy(const std::string& s) {
     return s == "Y" || s == "y" || s == "N" || s == "n";
+}
+bool AppManager::validateExplosionProbability(int p) { return p >= 1 && p <= 1000; }
+bool AppManager::validateMinRadius(int r) { return r >= 1 && r <= 10; }
+bool AppManager::validateMaxRadius(int rMin, int rMax) {
+    return rMax >= 1 && rMax <= 10 && rMax >= rMin;
 }
 
 void AppManager::run() {
@@ -130,28 +168,56 @@ void AppManager::regenerateSchedule() {
 }
 
 void AppManager::spawnNewLine(int width, int height) {
-    Direction dir = Direction::TopToBottom;
-    Shape     shape = Shape::Straight;
+    Direction dir   = Direction::TopToBottom;
+    LineShape shape = LineShape::Straight;
 
-    auto line = std::make_unique<Line>(params.length, dir, shape, params.epilepsy);
+    auto line = std::make_unique<Line>(
+        params.length, dir, shape, params.epilepsy,
+        params.explosionProbability,
+        params.minExplosionRadius,
+        params.maxExplosionRadius
+    );
     line->reset(width, height);
-    activeLines.push_back(std::move(line));
+    activeFigures.push_back(std::move(line));
 }
 
-void AppManager::updateAllLines() {
-    for (auto& line : activeLines) {
-        line->step();
+void AppManager::updateAllFigures() {
+    std::vector<std::unique_ptr<Figure>> newFigures;
+
+    for (auto& fig : activeFigures) {
+        fig->step();
+
+        Line* line = dynamic_cast<Line*>(fig.get());
+        if (line && line->hasExploded() && !line->isExplosionHandled() && line->getLength() > 0) {
+            auto explosion = std::make_unique<Explosion>(
+                line->getHeadX(), line->getHeadY(),
+                params.minExplosionRadius, params.maxExplosionRadius
+            );
+            explosion->draw();
+            newFigures.push_back(std::move(explosion));
+            line->markExplosionHandled();
+        }
+    }
+
+    for (auto& f : newFigures) {
+        activeFigures.push_back(std::move(f));
+    }
+
+    for (auto& fig : activeFigures) {
+        Line* line = dynamic_cast<Line*>(fig.get());
+        if (line && !line->isFinished()) {
+            line->draw();
+        }
     }
 }
 
-void AppManager::removeFinishedLines() {
-    auto it = activeLines.begin();
-    while (it != activeLines.end()) {
+void AppManager::removeFinishedFigures() {
+    auto it = activeFigures.begin();
+    while (it != activeFigures.end()) {
         if ((*it)->isFinished()) {
-            (*it)->eraseAll();
-            it = activeLines.erase(it);
-        }
-        else {
+            (*it)->erase();
+            it = activeFigures.erase(it);
+        } else {
             ++it;
         }
     }
@@ -185,8 +251,8 @@ void AppManager::mainLoop() {
 
         if (now - lastStepTime >= stepInterval) {
             lastStepTime = now;
-            updateAllLines();
-            removeFinishedLines();
+            updateAllFigures();
+            removeFinishedFigures();
         }
 
         Sleep(10);

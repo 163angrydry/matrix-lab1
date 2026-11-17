@@ -3,22 +3,28 @@
 #include <cstdlib>
 #include <cmath>
 
-Line::Line(int length, Direction dir, Shape shape, bool epilepsy)
-    : length(length), direction(dir), shape(shape), epilepsy(epilepsy),
+Line::Line(int length, Direction dir, LineShape shape, bool epilepsy,
+    int explosionProbability, int minExplosionRadius, int maxExplosionRadius)
+    : length(length), targetLength(length), direction(dir), shape(shape), epilepsy(epilepsy),
+    explosionProbability(explosionProbability),
+    minExplosionRadius(minExplosionRadius),
+    maxExplosionRadius(maxExplosionRadius),
+    exploded(false),
+    explosionHandled(false),
     headX(0), headY(0), stepCount(0), finished(false),
     consoleWidth(80), consoleHeight(25) {}
 
-int Line::getOffsetX(int index) const {
+int Line::getOffsetX(int index, int size) const {
     switch (shape) {
-    case Shape::Straight:
+    case LineShape::Straight:
         return 0;
-    case Shape::Zigzag:
+    case LineShape::Zigzag:
         if (direction == Direction::TopToBottom || direction == Direction::BottomToTop)
             return (index % 2 == 0) ? 0 : 1;
         return 0;
-    case Shape::Diamond:
+    case LineShape::Diamond:
         if (direction == Direction::TopToBottom || direction == Direction::BottomToTop) {
-            int mid = length / 2;
+            int mid = size / 2;
             return mid - std::abs(index - mid);
         }
         return 0;
@@ -26,31 +32,24 @@ int Line::getOffsetX(int index) const {
     return 0;
 }
 
-int Line::getOffsetY(int index) const {
-    switch (direction) {
-    case Direction::TopToBottom:  return -index;
-    case Direction::BottomToTop:  return  index;
-    default: return 0;
-    }
-}
-
-void Line::getSymbolPos(int index, int& x, int& y, int hx, int hy) const {
+void Line::getSymbolPos(int index, int& x, int& y, int hx, int hy, int size) const {
+    int offX = getOffsetX(index, size);
     switch (direction) {
     case Direction::TopToBottom:
-        x = hx + getOffsetX(index);
+        x = hx + offX;
         y = hy - index;
         break;
     case Direction::BottomToTop:
-        x = hx + getOffsetX(index);
+        x = hx + offX;
         y = hy + index;
         break;
     case Direction::LeftToRight:
         x = hx - index;
-        y = hy + getOffsetY(index);
+        y = hy;
         break;
     case Direction::RightToLeft:
         x = hx + index;
-        y = hy + getOffsetY(index);
+        y = hy;
         break;
     }
 }
@@ -59,7 +58,11 @@ void Line::reset(int consoleWidth, int consoleHeight) {
     this->consoleWidth = consoleWidth;
     this->consoleHeight = consoleHeight;
     finished = false;
+    exploded = false;
+    explosionHandled = false;
     stepCount = 0;
+    targetLength = length;
+    chars.clear();
 
     switch (direction) {
     case Direction::TopToBottom:
@@ -82,11 +85,24 @@ void Line::reset(int consoleWidth, int consoleHeight) {
 }
 
 void Line::step() {
-    if (stepCount >= length) {
-        int tx, ty;
-        getSymbolPos(length - 1, tx, ty, headX, headY);
-        if (tx >= 0 && tx < consoleWidth && ty >= 0 && ty < consoleHeight)
-            ConsoleHelper::writeCharAt(tx, ty, ' ', 0);
+    if (finished) return;
+
+    std::vector<char> oldChars = chars;
+    int prevHeadX = headX;
+    int prevHeadY = headY;
+
+    if (!exploded && stepCount > 0) {
+        int hx, hy;
+        getSymbolPos(0, hx, hy, headX, headY, (int)chars.size());
+        if (hx >= 0 && hx < consoleWidth && hy >= 0 && hy < consoleHeight) {
+            if (rand() % 1000 < explosionProbability) {
+                exploded = true;
+            }
+        }
+    }
+
+    if (exploded && targetLength > 0) {
+        targetLength--;
     }
 
     switch (direction) {
@@ -97,50 +113,84 @@ void Line::step() {
     }
     stepCount++;
 
-    int hx, hy;
-    getSymbolPos(0, hx, hy, headX, headY);
-    if (hx >= 0 && hx < consoleWidth && hy >= 0 && hy < consoleHeight) {
-        WORD color = epilepsy ? ConsoleHelper::getRandomBrightColor()
-            : ConsoleHelper::getGreenColor();
-        ConsoleHelper::writeCharAt(hx, hy, Symbol::getRandomPrintableChar(), color);
+    if (targetLength > 0) {
+        chars.insert(chars.begin(), Symbol::getRandomPrintableChar());
+        if ((int)chars.size() > targetLength) {
+            chars.resize(targetLength);
+        }
+    }
+    else {
+        chars.clear();
+    }
+
+    for (int i = 0; i < (int)oldChars.size(); ++i) {
+        int x, y;
+        getSymbolPos(i, x, y, prevHeadX, prevHeadY, (int)oldChars.size());
+        if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight)
+            ConsoleHelper::writeCharAt(x, y, ' ', 0);
+    }
+
+    for (int i = 0; i < (int)chars.size(); ++i) {
+        int x, y;
+        getSymbolPos(i, x, y, headX, headY, (int)chars.size());
+        if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight) {
+            WORD color = epilepsy ? ConsoleHelper::getRandomBrightColor()
+                : ConsoleHelper::getGreenColor();
+            ConsoleHelper::writeCharAt(x, y, chars[i], color);
+        }
+    }
+
+    if (chars.empty()) {
+        finished = true;
+        return;
     }
 
     bool allOut = false;
+    int sz = (int)chars.size();
     switch (direction) {
     case Direction::TopToBottom:
-        allOut = (headY - (length - 1) >= consoleHeight);
+        allOut = (headY - (sz - 1) >= consoleHeight);
         break;
     case Direction::BottomToTop:
-        allOut = (headY + (length - 1) < 0);
+        allOut = (headY + (sz - 1) < 0);
         break;
     case Direction::LeftToRight:
-        allOut = (headX - (length - 1) >= consoleWidth);
+        allOut = (headX - (sz - 1) >= consoleWidth);
         break;
     case Direction::RightToLeft:
-        allOut = (headX + (length - 1) < 0);
+        allOut = (headX + (sz - 1) < 0);
         break;
     }
 
     if (allOut) {
-        for (int i = 0; i < length; ++i) {
-            int x, y;
-            getSymbolPos(i, x, y, headX, headY);
-            if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight)
-                ConsoleHelper::writeCharAt(x, y, ' ', 0);
+        finished = true;
+    }
+}
+
+void Line::draw() {
+    for (int i = 0; i < (int)chars.size(); ++i) {
+        int x, y;
+        getSymbolPos(i, x, y, headX, headY, (int)chars.size());
+        if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight) {
+            WORD color = epilepsy ? ConsoleHelper::getRandomBrightColor()
+                : ConsoleHelper::getGreenColor();
+            ConsoleHelper::writeCharAt(x, y, chars[i], color);
         }
     }
-
-    finished = allOut;
 }
 
 void Line::eraseAll() {
-    for (int i = 0; i < length; ++i) {
+    for (int i = 0; i < (int)chars.size(); ++i) {
         int x, y;
-        getSymbolPos(i, x, y, headX, headY);
+        getSymbolPos(i, x, y, headX, headY, (int)chars.size());
         if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight) {
             ConsoleHelper::writeCharAt(x, y, ' ', 0);
         }
     }
+}
+
+void Line::erase() {
+    eraseAll();
 }
 
 bool Line::isFinished() const { return finished; }
