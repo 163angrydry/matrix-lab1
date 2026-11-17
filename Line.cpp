@@ -61,8 +61,6 @@ void Line::reset(int consoleWidth, int consoleHeight) {
     finished = false;
     stepCount = 0;
 
-    ConsoleHelper::clearScreen();
-
     switch (direction) {
     case Direction::TopToBottom:
         headX = rand() % consoleWidth;
@@ -84,23 +82,13 @@ void Line::reset(int consoleWidth, int consoleHeight) {
 }
 
 void Line::step() {
-   
     if (stepCount >= length) {
-        int prevHeadX = headX, prevHeadY = headY;
-       
-        switch (direction) {
-        case Direction::TopToBottom:  prevHeadY--; break;
-        case Direction::BottomToTop:  prevHeadY++; break;
-        case Direction::LeftToRight:  prevHeadX--; break;
-        case Direction::RightToLeft:  prevHeadX++; break;
-        }
         int tx, ty;
-        getSymbolPos(length - 1, tx, ty, prevHeadX, prevHeadY);
+        getSymbolPos(length - 1, tx, ty, headX, headY);
         if (tx >= 0 && tx < consoleWidth && ty >= 0 && ty < consoleHeight)
             ConsoleHelper::writeCharAt(tx, ty, ' ', 0);
     }
 
-   
     switch (direction) {
     case Direction::TopToBottom:  headY++; break;
     case Direction::BottomToTop:  headY--; break;
@@ -133,14 +121,26 @@ void Line::step() {
         break;
     }
 
-    if (allOut && stepCount >= length) {
-        int lastX, lastY;
-        getSymbolPos(length - 1, lastX, lastY, headX, headY);
-        if (lastX >= 0 && lastX < consoleWidth && lastY >= 0 && lastY < consoleHeight)
-            ConsoleHelper::writeCharAt(lastX, lastY, ' ', 0);
+    if (allOut) {
+        for (int i = 0; i < length; ++i) {
+            int x, y;
+            getSymbolPos(i, x, y, headX, headY);
+            if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight)
+                ConsoleHelper::writeCharAt(x, y, ' ', 0);
+        }
     }
 
     finished = allOut;
+}
+
+void Line::eraseAll() {
+    for (int i = 0; i < length; ++i) {
+        int x, y;
+        getSymbolPos(i, x, y, headX, headY);
+        if (x >= 0 && x < consoleWidth && y >= 0 && y < consoleHeight) {
+            ConsoleHelper::writeCharAt(x, y, ' ', 0);
+        }
+    }
 }
 
 bool Line::isFinished() const { return finished; }

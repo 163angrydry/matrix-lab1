@@ -12,6 +12,7 @@ public:
     void step();
     bool isFinished() const;
     void reset(int consoleWidth, int consoleHeight);
+    void eraseAll();
 
 private:
     int  length;

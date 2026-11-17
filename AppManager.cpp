@@ -145,13 +145,16 @@ void AppManager::updateAllLines() {
 }
 
 void AppManager::removeFinishedLines() {
-    activeLines.erase(
-        std::remove_if(activeLines.begin(), activeLines.end(),
-            [](const std::unique_ptr<Line>& line) {
-                return line->isFinished();
-            }),
-        activeLines.end()
-    );
+    auto it = activeLines.begin();
+    while (it != activeLines.end()) {
+        if ((*it)->isFinished()) {
+            (*it)->eraseAll();
+            it = activeLines.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
 }
 
 void AppManager::mainLoop() {
